@@ -30,6 +30,17 @@ The adjusted closing price amends a stock's closing price to reflect that stock'
 More accurate reflection of the value of the stock at the historical time
 Use this instead of Close price, better for back testing.
 
+#############
+Recent Changes
+- Simply code to only target Long positions
+
+TODO
+- Adapt code so that when buy signal is triggered for a 15min block. Buy price is the "Open" price of the row immediately after. 
+- Add or substract loss at row where a position is closed
+
+PROBLEM 
+- FINAL MONEY IS OVERWRITTEN DURING SECOND LOOP ... multiple trades could end on same row and give wrong value!
+
 """
 #%% IMPORT LIBRARIES
 import pandas as pd
@@ -73,7 +84,7 @@ def stochastic(data, k_window, d_window, window):
     min_val  = data.rolling(window=window, center=False).min()
     max_val = data.rolling(window=window, center=False).max()
     
-    stoch = ( (data - min_val) / (max_val - min_val) ) * 100
+    stoch = ((data - min_val) / (max_val - min_val)) * 100
     
     K = stoch.rolling(window=k_window, center=False).mean() 
     D = K.rolling(window=d_window, center=False).mean() 
@@ -103,8 +114,7 @@ def computeRSI (data, time_window):
     up_chg_avg   = up_chg.ewm(com=time_window-1 , min_periods=time_window).mean()
     down_chg_avg = down_chg.ewm(com=time_window-1 , min_periods=time_window).mean()
     
-    rs = abs(up_chg_avg/down_chg_avg)
-    rsi = 100 - 100/(1+rs)
+    rsi = 100 - 100 / (1 + abs(up_chg_avg/down_chg_avg))
     
     return rsi
 
@@ -165,7 +175,6 @@ def sum_indicators (row):
     #    return "Short"
         
     else:
-        #return "."
         return "-"
     
 def calculate_indicators(df_func):
@@ -176,122 +185,6 @@ def calculate_indicators(df_func):
     df_func['EMA_indicator'] = df_func.apply(EMA_indicator, axis=1)
     df_func['Indicator'] = df_func.apply(sum_indicators, axis=1) 
     
-    return df_func
-
-def backtesting_code(df_func, position_size, pot_size, transaction_fee, stamp_duty):
-    
-    # Deal with Long and Short separately.
-    # Start with a pot of £1000 and only investing 2% of your portfolio
-    # Assume entry and midpoint = High - [(High-Low)/2]
-    
-    # position_size = percentage of capital you wish to invest in each position - e.g. 0.02 = 2%
-    # pot_size = starting capital (£) 
-    # transaction_fee = cost of each transaction 
-    # stamp_duty = stamp duty due with some FTSE100 companies?
-    
-    for index1, row1 in df_func.iterrows():
-        
-        if index1 == 0:
-            df_func.loc[index1, "Initial Money (£)"] = round(pot_size,2)
-        
-        else:
-            df_func.loc[index1, "Initial Money (£)"] = round(df_func.loc[(index1-1), "Final Money (£)"], 2)
-        
-        # If no indicator signal, pass to next row
-        if row1.Indicator == "-":
-            df_func.loc[index1, "Final Money (£)"] = round(df_func.loc[index1, "Initial Money (£)"], 2)
-            continue
-        
-        # If Indicator gives a LONG signal, buy into long and create second iteration through rows to see outcome
-        elif row1.Indicator == "Long":
-            
-            # Set Target and StopLoss Variables
-            Target = float(row1['Adj Close'] + 2*row1['ATR_14'])
-            StopLoss = float(row1['Adj Close'] - 3*row1['ATR_14'])
-            df_func.loc[index1, "Target"] = round(Target,2)
-            df_func.loc[index1, "StopLoss"] = round(StopLoss,2)
-            
-            # Calculate money spent on the position and nshares bought
-            money_spent = position_size*df_func.loc[index1, "Initial Money (£)"]
-            nshares_purchased = money_spent/(row1.High - (row1.High - row1.Low) / 2)
-            
-            for index2, row2 in df_func.loc[(index1+1):].iterrows():
-                if row2.High > Target:
-                    df_func.loc[index1, "Outcome"] = "Long - Win"
-                    df_func.loc[index1, "Exit Row"] = row2.name
-                    
-                    profit = nshares_purchased*Target
-                    df_func.loc[index1, "Profit/Loss (£)"] = round(profit,2)
-                    df_func.loc[index1, "Final Money (£)"] = round(df_func.loc[index1, "Initial Money (£)"] + profit,2)
-                    break 
-                    
-                elif row2.Low < StopLoss:
-                    df_func.loc[index1, "Outcome"] = "Long - Lost"
-                    df_func.loc[index1, "Exit Row"] = row2.name
-                    
-                    loss = nshares_purchased*StopLoss
-                    df_func.loc[index1, "Profit/Loss (£)"] = -round(loss,2)
-                    df_func.loc[index1, "Final Money (£)"] = round(df_func.loc[index1, "Initial Money (£)"] - loss,2)
-                    break 
-                
-                elif index2 == len(df_func) - 1:
-                    # If iteration reaches the end of the dataframe and doesn't exit the position - doesn't hit either Target or StopLoss
-                    df_func.loc[index1, "Outcome"] = "Long - Still Open"
-                    df_func.loc[index1, "Exit Row"] = np.nan
-                    df_func.loc[index1, "Final Money (£)"] = df_func.loc[index1, "Initial Money (£)"]
-                    
-                else:
-                    continue
-                
-        # If Indicator gives a SHORT signal, buy into short and create second iteration through rows to see outcome
-        elif row1.Indicator == "Short":
-            
-            # Set Target and StopLoss Variables
-            Target = float(row1['Adj Close'] - 2*row1['ATR_14'])
-            StopLoss = float(row1['Adj Close'] + 3*row1['ATR_14'])
-            df_func.loc[index1, "Target"] = round(Target,2) 
-            df_func.loc[index1, "StopLoss"] = round(StopLoss,2)
-            
-            # Calculate value you wish to short
-            # How much went into margin account from sale of borrowed shares? 
-            margin_account_gain = position_size*df_func.loc[index1, "Initial Money (£)"]
-            # And how many shares did you borrow?
-            nshares_borrowed = margin_account_gain/(row1.High - (row1.High - row1.Low) / 2)
-            
-            for index2, row2 in df_func.loc[(index1+1):].iterrows():
-                if row2.Low < Target:
-                    df_func.loc[index1, "Outcome"] = "Short - Win"
-                    df_func.loc[index1, "Exit Row"] = index2
-                    
-                    # Profit is cost to buy equal number of borrowed shares now - money from initial sale when price was higher
-                    profit = margin_account_gain - (nshares_borrowed*Target)
-                    df_func.loc[index1, "Profit/Loss (£)"] = round(profit,2)
-                    df_func.loc[index1, "Final Money (£)"] = round(df_func.loc[index1, "Initial Money (£)"] + profit,2)
-                    break
-                
-                elif row2.High > StopLoss:
-                    df_func.loc[index1, "Outcome"] = "Short - Lost"
-                    df_func.loc[index1, "Exit Row"] = index2
-                    
-                    # Loss is cost to buy equal number of borrowed shares now - money from initial sale when price was lower
-                    loss = (nshares_borrowed*StopLoss) - margin_account_gain
-                    df_func.loc[index1, "Profit/Loss (£)"] = -round(loss,2)
-                    df_func.loc[index1, "Final Money (£)"] = df_func.loc[index1, "Initial Money (£)"] - loss
-                    break
-                    
-                elif index2 == len(df_func) - 1:
-                    # If iteration reaches the end of the dataframe and doesn't exit the position - doesn't hit either Target or StopLoss
-                    df_func.loc[index1, "Outcome"] = "Short - Still Open"
-                    df_func.loc[index1, "Exit Row"] = np.nan
-                    df_func.loc[index1, "Final Money (£)"] = df_func.loc[index1, "Initial Money (£)"]
-                    
-                else:
-                    continue
-                    
-        else:
-            print("Something's wrong, indicator value not 0, 1 or 2")
-            break 
-        
     return df_func
 
 #%% Load in the plotting functions
@@ -449,9 +342,9 @@ def main():
     
     # Create dataframe with stock prices (1hr scale, 2 year)
     stock_names = "VLX.L"
-    
+        
     # Set working directory
-    working_d = "C:\\Users\\cns\\Documents\\PythonCode\\shares_rolling_av_strat"
+    working_d = "C:\\Users\\cns\\Documents\\PythonCode\\shares_rolling_av_strat\\Stock_market_trader_EMA_RSI_ATR"
     os.chdir(f"{working_d}")
     
     df = get_stock_info(stock_names)
@@ -469,13 +362,9 @@ def main():
     # Catagorise indicators
     df = calculate_indicators(df_func=df)
     
-    # Run the backtesting code 
-    df = backtesting_code(df_func=df, position_size = 0.02, pot_size=1000, transaction_fee=15, stamp_duty=0)
-    
     # Import function for testing long positions only, trying to incorporate fees
-    from EMA_RSI_ATR_youtube_long_only_plus_fees_function import long_only_plus_fees
-    df = long_only_plus_fees(df_func=df, position_size=0.02, pot_size=1000, transaction_fee=2.95, stamp_duty=0)
-    print(df)
+    from EMA_RSI_ATR_backtesting_function import backtesting_function
+    df = backtesting_function(df_func=df, position_size=0.02, pot_size=1000, transaction_fee=2.95, stamp_duty=0)
 
     # Print the winrate statistics to console
     inspect_total_winrates(df_func=df, stock_names=stock_names)
@@ -488,6 +377,7 @@ def main():
     # Save the results
     df.to_csv(f"{working_d}\\VOLEX_results_ii_fee.tsv", sep="\t")
 
+    print(807*transaction_fee*2)
 
 if __name__ == "__main__":
     main()
