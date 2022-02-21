@@ -50,7 +50,7 @@ def backtesting_function(df_func, position_size, pot_size, transaction_fee, stam
         
         # If preceding row's indicator signal was LONG signal, buy into long and create second iteration through rows to see outcome
         elif df_func.loc[(index1-1),"Indicator"] == "Long":
-            
+
             ### PURCHASE SECTION ### 
             
             # Set Target and StopLoss Variables, based on Open price of subsequent time block.
@@ -61,10 +61,20 @@ def backtesting_function(df_func, position_size, pot_size, transaction_fee, stam
             df_func.loc[index1,"Target"] = round(Target,2)
             df_func.loc[index1,"StopLoss"] = round(StopLoss,2)
             
-            # Calculate nshares bought and money spent on the position (inc. transaction fee) , NB: nshares can only be an integer value!
-            nshares_purchased = math.floor(position_size*df_func.loc[index1,"Initial Money (£)"] / df_func.loc[index1,"Open"])
-            money_spent = nshares_purchased*df_func.loc[index1,"Open"] + transaction_fee
-            print(money_spent)
+            # Calculate nshares bought and money spent on the position (inc. transaction fee)
+            # NB: nshares can only be an integer value!
+            nshares_purchased = position_size*df_func.loc[index1,"Initial Money (£)"] / df_func.loc[index1,"Open"]
+            
+            print(nshares_purchased)
+            if nshares_purchased < 1:
+                nshares_purchased = 1
+            elif nshares_purchased > 1:
+                nshares_purchased = np.floor(nshares_purchased)
+            print(nshares_purchased)
+            
+            df_func.loc[index1, "N_shares_purchased"] = nshares_purchased
+            df_func.loc[index1, "Money_spent_on_shares"] = nshares_purchased*df_func.loc[index1,"Open"]
+            money_spent = (nshares_purchased*df_func.loc[index1,"Open"]) + transaction_fee
             
             # If profit/loss column is null, no prior trades exited here
             if pd.isnull(df_func.loc[index1,"Profit/Loss (£)"]):

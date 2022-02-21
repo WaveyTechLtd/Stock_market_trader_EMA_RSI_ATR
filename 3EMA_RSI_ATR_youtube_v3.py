@@ -366,6 +366,8 @@ def main():
     from EMA_RSI_ATR_backtesting_function import backtesting_function
     df = backtesting_function(df_func=df, position_size=0.02, pot_size=1000, transaction_fee=2.95, stamp_duty=0)
 
+    # TODO FIX MATH.FLOOR Why is it returning zero? 
+
     # Print the winrate statistics to console
     inspect_total_winrates(df_func=df, stock_names=stock_names)
     inspect_long_winrates(df_func=df, stock_names=stock_names)
@@ -376,8 +378,6 @@ def main():
     
     # Save the results
     df.to_csv(f"{working_d}\\VOLEX_results_ii_fee.tsv", sep="\t")
-
-    print(807*transaction_fee*2)
 
 if __name__ == "__main__":
     main()
