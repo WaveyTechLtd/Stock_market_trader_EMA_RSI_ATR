@@ -10,6 +10,9 @@ Required info is
 - Stocastic RSI (K=3, D=3, RSI_length=14, Stocastic_length=14, source=close) 
 - ATR - length 14, RMA smoothing
 
+- He was using EURUSD market, not individual stocks
+- buying stocks forces you to trade n=1 stock minium, rather than always a percentage of your capital?
+
 # For a Long position 
 (1) 8EMA > 14EMA > 50EMA, indicates upward trend
 (2) Stocastic cross over
@@ -166,189 +169,81 @@ def RSI_indicator (row):
     else:
         return "."
     
-def sum_indicators (row):
-    # Summation step for all the different indicators
-    if row['EMA_indicator'] == "Long" and row['Candle_indicator'] == "Long" and row['RSI_indicator'] == "Long":
-        return "Long"
+def overall_indicator (row, pos):
+    # Provide overall indicator for LONG or SHORT position
+    # Variable pos = "LONG" (long positions only), "SHORT" (short positions only) or "BOTH" (Long and Short positions)
     
-    #elif row['EMA_indicator'] == "Short" and row['Candle_indicator'] == "Short" and row['RSI_indicator'] == "Short":
-    #    return "Short"
-        
+    if pos == "LONG":
+        if row['EMA_indicator'] == "Long" and row['Candle_indicator'] == "Long" and row['RSI_indicator'] == "Long":
+            return "Long"
+        else:
+            return "-"
+    
+    elif pos == "SHORT":
+        if row['EMA_indicator'] == "Short" and row['Candle_indicator'] == "Short" and row['RSI_indicator'] == "Short":
+            return "Short"
+        else:
+            return "-"
+    
+    elif pos == "BOTH":
+        if row['EMA_indicator'] == "Long" and row['Candle_indicator'] == "Long" and row['RSI_indicator'] == "Long":
+            return "Long"
+        elif row['EMA_indicator'] == "Short" and row['Candle_indicator'] == "Short" and row['RSI_indicator'] == "Short":
+            return "Short"
+        else:
+            return "-"
     else:
-        return "-"
+        raise SyntaxError('Please add "pos" value - either LONG, SHORT or BOTH')
     
-def calculate_indicators(df_func):
+def calculate_annotate_indicators(df_func, pos):
     
     # Run these functions to create the new columns
     df_func['RSI_indicator'] = df_func.apply(RSI_indicator, axis=1)
     df_func['Candle_indicator'] = df_func.apply(Candle_indicator, axis=1)
     df_func['EMA_indicator'] = df_func.apply(EMA_indicator, axis=1)
-    df_func['Indicator'] = df_func.apply(sum_indicators, axis=1) 
+    
+    # Annotate with overall indicator column, all three indicators must be either Long or Short
+    df_func['Indicator'] = df_func.apply(overall_indicator, pos=pos, axis=1) 
     
     return df_func
 
-#%% Load in the plotting functions
-def plot_price(data):
-    # plot price
-    plt.figure(figsize=(15,5))
-    plt.plot(data.index, data['Adj Close'])
-    plt.plot(data.index, data['EMA_50'], label='EMA_50')
-    plt.plot(data.index, data['EMA_14'], label='EMA_14')
-    plt.plot(data.index, data['EMA_8'], label='EMA_8')
-    plt.title('Price chart (Adj Close)')
-    
-    plt.legend(loc='best')
-    plt.show()
-    return None
+#%% PLOTTING SECTION
+from EMA_RSI_ATR_plotting_functions import plot_price, plot_stoch_RSI, plot_ATR, plot_candlestick
 
-def plot_RSI(data):
-    # plot correspondingRSI values and significant levels
-    plt.figure(figsize=(15,5))
-    plt.title('RSI chart')
-    plt.plot(data.index, data['RSI'], label='RSI')
-
-    plt.axhline(0, linestyle='--', alpha=0.1)
-    plt.axhline(20, linestyle='--', alpha=0.5)
-    plt.axhline(30, linestyle='--')
-
-    plt.axhline(70, linestyle='--')
-    plt.axhline(80, linestyle='--', alpha=0.5)
-    plt.axhline(100, linestyle='--', alpha=0.1)
-    
-    plt.legend(loc='best')
-    plt.show()
-    return None
-
-def plot_stoch_RSI(data):
-    # plot corresponding Stoch RSI values and significant levels
-    plt.figure(figsize=(15,5))
-    plt.title('stochRSI chart')
-    plt.plot(data.index, data['K'], label='RSI_K')
-    plt.plot(data.index, data['D'], label='RSI_D')
-
-    plt.axhline(0, linestyle='--', alpha=0.1)
-    plt.axhline(20, linestyle='--', alpha=0.5)
-    #plt.axhline(30, linestyle='--')
-
-    #plt.axhline(70, linestyle='--')
-    plt.axhline(80, linestyle='--', alpha=0.5)
-    plt.axhline(100, linestyle='--', alpha=0.1)
-    
-    plt.legend(loc='best')
-    plt.show()
-    return None
-
-def plot_ATR(data):
-    
-    # Plot the ATR for given time period
-    plt.figure(figsize=(15,5))
-    plt.title('ATR Chart')
-    
-    plt.plot(data.index, data['ATR_14'].fillna(0), label='ATR_14')   # NaN to zeros so plot is in scale
-    plt.legend(loc='best')
-    plt.show()
-    return None
-
-def plot_candlestick(data):
-    
-    #create figure
-    plt.figure(figsize=(15,5))
-    plt.title('Candlestick Chart')
-    
-    #define width of candlestick elements
-    width_main = .05
-    width_tail = .01
-
-    #define up and down prices
-    up = data[data['Adj Close']>=data['Open']]
-    down = data[data['Adj Close']<data['Open']]
-
-    #define colors to use
-    col1 = 'green'
-    col2 = 'red'
-
-    #plot up prices
-    plt.bar(up.index, height=(up['Adj Close'] - up['Open']), width=width_main, bottom=up['Open'], color=col1)
-    plt.bar(up.index, height=(up['High'] - up['Adj Close']), width=width_tail, bottom=up['Adj Close'], color=col1)
-    plt.bar(up.index, height=(up['Low'] - up['Open']), width=width_tail, bottom=up['Open'], color=col1)
-
-    #plot down prices
-    plt.bar(down.index, height=(down['Adj Close'] - down['Open']), width=width_main, bottom=down['Open'], color=col2)
-    plt.bar(down.index, height=(down['High'] - down['Open']), width=width_tail, bottom=down['Open'], color=col2)
-    plt.bar(down.index, height=(down['Low'] - down['Adj Close']), width=width_tail, bottom=down['Adj Close'], color=col2)
-    
-    #add emas
-    plt.plot(data.index, data['EMA_50'], label='EMA_50')
-    plt.plot(data.index, data['EMA_14'], label='EMA_14')
-    plt.plot(data.index, data['EMA_8'], label='EMA_8')
-
-    #rotate x-axis tick labels
-    plt.xticks(rotation=45, ha='right')
-
-    #display candlestick chart
-    plt.legend(loc='best')
-    plt.show()
-    return None
-
-# Define function to plot all plots together 
-
-def plot_all(data):
+def plot_all(data):  
     plot_price(data)
     #plot_RSI(data)
     plot_stoch_RSI(data)
     plot_ATR(data)
     plot_candlestick(data)
-    return None
+    return None 
 
 #%% Inspect outcomes, to be run almost interactively
 
-def inspect_total_winrates(df_func, stock_names):
+def inspect_winrate(df_func, stock_names):
 
     df_func.Outcome.value_counts()
     
     # Overall Winrate
-    winrate = 100*(df_func.Outcome.str.count("Win").sum() / (df_func.Outcome.str.count("Win").sum() + df_func.Outcome.str.count("Lost").sum()))
-    n_trades = df_func.Outcome.str.count("Win").sum() + df_func.Outcome.str.count("Lost").sum() 
+    winrate = 100*(df_func.Outcome.str.count("Win").sum() / (df_func.Outcome.str.count("Win").sum() + df_func.Outcome.str.count("Loss").sum()))
+    n_trades = df_func.Outcome.str.count("Win").sum() + df_func.Outcome.str.count("Loss").sum() 
     
     print(f"Overall Winrate for {stock_names} = {winrate:.1f} %")
     print(f"Total Number of Trades {stock_names} = {n_trades}")
 
     return None
 
-def inspect_long_winrates(df_func, stock_names):
-    
-    # Long only Winrate
-    winrate = 100*(df_func.Outcome.str.count("Long - Win").sum() / (df_func.Outcome.str.count("Long - Win").sum() + df_func.Outcome.str.count("Long - Lost").sum()))
-    n_trades = df_func.Outcome.str.count("Long - Win").sum() + df_func.Outcome.str.count("Long - Lost").sum() 
-    
-    print(f"Overall Long Winrate for {stock_names} = {winrate:.1f} %")
-    print(f"Total Number of Long Trades {stock_names} = {n_trades}")
-    
-    return None
-    
-def inspect_short_winrates(df_func, stock_names):
-    
-    # Short only Winrate
-    winrate = 100*(df_func.Outcome.str.count("Short - Win").sum() / (df_func.Outcome.str.count("Short - Win").sum() + df_func.Outcome.str.count("Short - Lost").sum()))
-    n_trades = df_func.Outcome.str.count("Short - Win").sum() + df_func.Outcome.str.count("Short - Lost").sum() 
-    
-    print(f"Overall Short Winrate for {stock_names} = {winrate:.2f} %")
-    print(f"Total Number of Short Trades {stock_names} = {n_trades}")
-    
-    return None
-
 #%% Define the main function of the programme
 def main():
     
-    # Create dataframe with stock prices (1hr scale, 2 year)
-    stock_names = "VLX.L"
-        
     # Set working directory
     working_d = "C:\\Users\\cns\\Documents\\PythonCode\\shares_rolling_av_strat\\Stock_market_trader_EMA_RSI_ATR"
     os.chdir(f"{working_d}")
     
+    # Create dataframe with stock prices (1hr scale, 2 year)
+    stock_names = "VLX.L"
     df = get_stock_info(stock_names)
-    
+        
     # Generate EMAs
     df = calculate_EMAs (df_func=df)
     
@@ -359,25 +254,50 @@ def main():
     # Generate ATR14
     df = calculate_ATR(df_func=df)
     
-    # Catagorise indicators
-    df = calculate_indicators(df_func=df)
+    # Calculate and annotate with indicators
+    # Variable pos = "LONG" (long positions only), "SHORT" (short positions only) or "BOTH" (Long and Short positions)
+    df = calculate_annotate_indicators(df_func=df, pos="LONG")
     
-    # Import function for testing long positions only, trying to incorporate fees
-    from EMA_RSI_ATR_backtesting_function import backtesting_function
-    df = backtesting_function(df_func=df, position_size=0.02, pot_size=1000, transaction_fee=2.95, stamp_duty=0)
-
-    # TODO FIX MATH.FLOOR Why is it returning zero? 
+    # Store a copy of the unmodified dataframe for Troubleshooting
+    df_temp = df.copy(deep=True)
+    
+    # Step-wise backtesting method 
+    from EMA_RSI_ATR_backtest_function_one import backtest_step_one
+    from EMA_RSI_ATR_backtest_function_two import backtest_step_two
+    
+    df = df_temp.copy(deep=True)
+    df = backtest_step_one(df_func=df, max_positions=1)
+    df = backtest_step_two(df_func=df, pot_size=1000, position_size=0.02, transaction_fee=2.95, stamp_duty=0)
+    
+    # Check final row's Final Money value
+    print(df.iloc[-1]['Final Money (£)'])
+    
+    df.columns
+    df["Profit/Loss on Sales (£)"].sum()
+    df['N_shares_purchased'].sum()*transaction_fee
+    df["Profit/Loss on Sales (£)"].sum()
+    
+    # Make the desired plots
+    plot_all(data=df)
+        
+    # TODO 
+    # Change it to have two iterations ... first cycle through the dataframe highlights all of the possible longs/shorts and exit rows
+    # Second pass or possible end of first, can calculate the costs of trade and profit of trade. 
+    # Third or second pass can trim dataframe down to action rows, and have some kind of counter feature much more easily
+    # Plots to show wins and losses through time etc
 
     # Print the winrate statistics to console
-    inspect_total_winrates(df_func=df, stock_names=stock_names)
-    inspect_long_winrates(df_func=df, stock_names=stock_names)
-    inspect_short_winrates(df_func=df, stock_names=stock_names)
+    inspect_winrate(df_func=df, stock_names=stock_names)
     
     # Plot All The Things
     plot_all(data=df)
     
     # Save the results
+    # in full
     df.to_csv(f"{working_d}\\VOLEX_results_ii_fee.tsv", sep="\t")
+    # trimmed version
+    df[['Date','Open','High','Low','Adj Close','Volume','Indicator','Initial Money (£)','Final Money (£)','Profit/Loss (£)',
+        'Target','StopLoss','N_shares_purchased','Money_spent_on_shares','Outcome','Exit Row']].to_csv(f"{working_d}\\VOLEX_results_ii_fee.tsv", sep="\t")
 
 if __name__ == "__main__":
     main()
